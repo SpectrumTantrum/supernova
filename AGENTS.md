@@ -7,7 +7,8 @@
 
 **`supernova`** is a portfolio of from-scratch implementations of geospatial
 and urban-analytics ML algorithms drawn from published research papers. Each
-algorithm lives under `algorithms/<name>/` and is independently runnable.
+algorithm lives under `algorithms/<framework>/<name>/` and is independently
+runnable.
 
 ## Repo layout
 
@@ -17,13 +18,16 @@ supernova/
 ├── .gitignore                      excludes .research/, __pycache__, etc.
 ├── .research/                      paywalled paper PDFs — NEVER commit
 └── algorithms/
-    └── <algo-name>/
-        ├── README.md               paper ref, theory recap, run instructions
-        ├── requirements.txt
-        ├── data.py                 dataclasses, helpers, synthetic generator
-        ├── <algo>_<stage>.py       one module per pipeline stage
-        ├── model.py                top-level orchestrator class
-        └── example.py              runnable smoke test on synthetic data
+    ├── pytorch-implementation/
+    │   └── <algo-name>/
+    │       ├── README.md           paper ref, theory recap, run instructions
+    │       ├── requirements.txt
+    │       ├── data.py             dataclasses, helpers, synthetic generator
+    │       ├── <algo>_<stage>.py   one module per pipeline stage
+    │       ├── model.py            top-level orchestrator class
+    │       └── example.py          runnable smoke test on synthetic data
+    └── mlx-implementation/
+        └── <algo-name>/            (same layout as above)
 ```
 
 Algorithm folders are deliberately **flat** — no `src/` or deep package
@@ -61,10 +65,10 @@ hierarchies. Aim for 5–8 source files per algorithm.
 ## Adding a new algorithm
 
 1. Drop the paper PDF in `.research/` (gitignored).
-2. Create `algorithms/<name>/` with the files listed in the layout above.
+2. Create `algorithms/pytorch-implementation/<name>/` (or `mlx-implementation/`) with the files listed in the layout above.
 3. Implement to paper fidelity; cite sections in docstrings.
 4. Write a synthetic generator + smoke test that exits 0 on success.
-5. Verify: `cd algorithms/<name> && python example.py`.
+5. Verify: `cd algorithms/pytorch-implementation/<name> && python example.py`.
 6. Update the **Existing algorithms** table below.
 7. Tag a release: `gh release create vX.Y.0 --generate-notes`.
 
@@ -72,7 +76,7 @@ hierarchies. Aim for 5–8 source files per algorithm.
 
 | Algorithm    | Paper                                                                 | Folder                       |
 |--------------|-----------------------------------------------------------------------|------------------------------|
-| Geo-Tile2Vec | Luo et al., *ACM TSAS* 9(2) Article 10, 2023 (doi:10.1145/3571741)    | `algorithms/geotile2vec/`    |
+| Geo-Tile2Vec | Luo et al., *ACM TSAS* 9(2) Article 10, 2023 (doi:10.1145/3571741)    | `algorithms/pytorch-implementation/geotile2vec/` |
 
 ## Cross-agent setup
 
