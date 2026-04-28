@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 from layer import AbnormalityAwareLayer
 
@@ -109,7 +108,6 @@ def train_aagnn(
     lr: float = 1e-3,
     weight_decay: float = 5e-4,
     optimizer: str = "adam",
-    seed: int = 0,
     verbose: bool = True,
 ) -> dict[str, list[float]]:
     """Algorithm 1 lines 6-10.
@@ -123,8 +121,6 @@ def train_aagnn(
         raise ValueError("R_idx is empty — nothing to train on.")
     if D_idx.size == 0:
         raise ValueError("D_idx is empty — nothing to validate on.")
-
-    torch.manual_seed(seed)
 
     device = X.device
     c = c.detach().to(device)
