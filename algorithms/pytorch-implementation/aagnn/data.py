@@ -96,10 +96,6 @@ def k_hop_neighbors(edges: np.ndarray, n: int, k: int = 1) -> list[list[int]]:
     if k < 1:
         raise ValueError(f"k must be >= 1, got {k}")
     adj = _adjacency_lists(edges, n)
-    if k == 1:
-        # Deduplicate just in case (validator forbids duplicates, but be defensive).
-        return [sorted(set(neigh)) for neigh in adj]
-
     out: list[list[int]] = []
     for src in range(n):
         seen: set[int] = {src}
@@ -181,6 +177,8 @@ class SyntheticAttributedNetwork:
         remaining_pool = all_nodes[self.n_structural_anomalies:]
 
         for start in range(0, len(struct_nodes), self.structural_clique_size):
+            # Trailing slice may be shorter than clique_size when n_structural_anomalies
+            # is not a multiple of structural_clique_size; the partial clique is intentional.
             clique = struct_nodes[start:start + self.structural_clique_size]
             for a_idx in range(len(clique)):
                 for b_idx in range(a_idx + 1, len(clique)):
@@ -220,14 +218,3 @@ class SyntheticAttributedNetwork:
             edges = np.zeros((0, 2), dtype=np.int64)
 
         return AttributedNetwork(X=X, edges=edges, n=n, f=f, labels=labels)
-
-
-__all__ = [
-    "AttributedNetwork",
-    "SyntheticAttributedNetwork",
-    "degree",
-    "k_hop_neighbors",
-    "DEFAULT_FEATURE_DIM",
-    "DEFAULT_N_COMMUNITIES",
-    "DEFAULT_NODES_PER_COMMUNITY",
-]
