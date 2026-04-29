@@ -11,6 +11,8 @@ landed on `main` between tag cuts.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-29
+
 ### Added
 - **AAGNN** (Abnormality-Aware Graph Neural Network) PyTorch implementation
   under `algorithms/pytorch-implementation/aagnn/` — Zhou et al.,
@@ -50,6 +52,7 @@ landed on `main` between tag cuts.
 - Initial repo scaffolding: `AGENTS.md` conventions, `.gitignore`
   excluding `.research/` paywalled PDFs, and the `algorithms/` layout.
 
-[Unreleased]: https://github.com/SpectrumTantrum/supernova/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SpectrumTantrum/supernova/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/SpectrumTantrum/supernova/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SpectrumTantrum/supernova/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SpectrumTantrum/supernova/releases/tag/v0.1.0
