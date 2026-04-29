@@ -79,6 +79,7 @@ hierarchies. Aim for 5–8 source files per algorithm.
 | Geo-Tile2Vec | Luo et al., *ACM TSAS* 9(2) Article 10, 2023 (doi:10.1145/3571741)    | `algorithms/pytorch-implementation/geotile2vec/` |
 | TransFlower  | Luo et al., arXiv:2402.15398v1, 2024                                  | `algorithms/pytorch-implementation/transflower/` |
 | AAGNN        | Zhou et al., *CIKM '21*, 2021 (doi:10.1145/3459637.3482195)           | `algorithms/pytorch-implementation/aagnn/`       |
+| MHGL         | Zhou et al., *SIAM SDM 2022* (unseen anomaly detection on networks)   | `algorithms/pytorch-implementation/mhgl/`        |
 
 ## Cross-agent setup
 
