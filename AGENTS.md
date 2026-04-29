@@ -80,6 +80,7 @@ hierarchies. Aim for 5–8 source files per algorithm.
 | TransFlower  | Luo et al., arXiv:2402.15398v1, 2024                                  | `algorithms/pytorch-implementation/transflower/` |
 | AAGNN        | Zhou et al., *CIKM '21*, 2021 (doi:10.1145/3459637.3482195)           | `algorithms/pytorch-implementation/aagnn/`       |
 | MHGL         | Zhou et al., *SIAM SDM 2022* (unseen anomaly detection on networks)   | `algorithms/pytorch-implementation/mhgl/`        |
+| ACDNE        | Shen et al., *AAAI 2020* (cross-network node classification)          | `algorithms/pytorch-implementation/acdne/`       |
 
 ## Cross-agent setup
 
