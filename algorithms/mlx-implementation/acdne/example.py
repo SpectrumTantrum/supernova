@@ -1,7 +1,7 @@
 """End-to-end ACDNE demo on a synthetic cross-network with planted domain shift.
 
 Run:
-    cd algorithms/pytorch-implementation/acdne
+    cd algorithms/mlx-implementation/acdne
     python example.py
     python example.py --seed 7
     python example.py --seed 42 --n-iters 1500
@@ -60,7 +60,8 @@ def main() -> int:
                     help="FE hidden dim f(1). Paper uses 512; 256 keeps the "
                          "smoke test fast on CPU and SBM doesn't need 512.")
     ap.add_argument("--micro-f1-floor", type=float, default=MICRO_F1_FLOOR)
-    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--device", default="cpu",
+                    help="Accepted for API parity; MLX selects its active device globally.")
     args = ap.parse_args()
 
     print("=" * 72)

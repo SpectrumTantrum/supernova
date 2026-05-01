@@ -247,7 +247,9 @@ class ACDNE:
     def load(cls, path: str) -> "ACDNE":
         """Reconstruct an ACDNE from a `save()` checkpoint (CPU-loaded)."""
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
-        obj = cls(ACDNEConfig(**ckpt["config"]))
+        cfg = ACDNEConfig(**ckpt["config"])
+        cfg.device = "cpu"
+        obj = cls(cfg)
         obj._feat_dim = ckpt["feat_dim"]
         obj._n_classes = ckpt["n_classes"]
         embed = EmbeddingModule(

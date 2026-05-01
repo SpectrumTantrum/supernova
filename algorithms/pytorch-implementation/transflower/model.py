@@ -93,7 +93,10 @@ class TransFlower:
         self._n_regions = N
 
         feats, dist_m, rl_m = prepare_region_tensors(regions, device=cfg.device)
-        train_F = build_flow_counts(train_flows, N, device=cfg.device)
+        region_id_to_idx = self._region_id_to_idx(regions)
+        train_F = build_flow_counts(
+            train_flows, N, device=cfg.device, region_id_to_idx=region_id_to_idx
+        )
         train_P = build_flow_proportions(train_F)
         train_origins = torch.nonzero(train_F.sum(dim=-1) > 0, as_tuple=False).flatten().tolist()
         if not train_origins:
@@ -101,7 +104,9 @@ class TransFlower:
 
         val_F = None
         if val_flows:
-            val_F = build_flow_counts(val_flows, N, device=cfg.device)
+            val_F = build_flow_counts(
+                val_flows, N, device=cfg.device, region_id_to_idx=region_id_to_idx
+            )
 
         self._build_modules()
         opt = torch.optim.RMSprop(
@@ -203,7 +208,12 @@ class TransFlower:
         Predicted counts = P_{i,j} · O_i where O_i = sum_j f_{ij}.
         """
         N = len(regions)
-        F_true = build_flow_counts(flows, N, device=self.config.device)
+        F_true = build_flow_counts(
+            flows,
+            N,
+            device=self.config.device,
+            region_id_to_idx=self._region_id_to_idx(regions),
+        )
         P = self.predict_distributions(regions)
         outflow = F_true.sum(dim=-1, keepdim=True)
         F_pred = P * outflow
@@ -231,6 +241,15 @@ class TransFlower:
             dim_ff=cfg.dim_ff,
             dropout=cfg.dropout,
         ).to(cfg.device)
+
+    @staticmethod
+    def _region_id_to_idx(regions: list[Region]) -> dict[int, int]:
+        mapping: dict[int, int] = {}
+        for idx, region in enumerate(regions):
+            if region.region_id in mapping:
+                raise ValueError(f"duplicate region_id {region.region_id!r}")
+            mapping[region.region_id] = idx
+        return mapping
 
     def _require_fitted(self) -> None:
         if self._encoder is None or self._predictor is None:
@@ -283,7 +302,9 @@ class TransFlower:
     @classmethod
     def load(cls, path: str) -> "TransFlower":
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
-        obj = cls(TransFlowerConfig(**ckpt["config"]))
+        cfg = TransFlowerConfig(**ckpt["config"])
+        cfg.device = "cpu"
+        obj = cls(cfg)
         obj._n_regions = ckpt["n_regions"]
         obj._build_modules()
         obj._encoder.load_state_dict(ckpt["encoder"])

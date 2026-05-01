@@ -220,6 +220,17 @@ def train_triplet_metric(
     all_indices = [e for evs in tile_to_events.values() for e in evs]
     if not eligible_tiles:
         raise ValueError("Need at least one tile with >=2 O-events for triplet learning.")
+    event_sets = {t: set(evs) for t, evs in tile_to_events.items()}
+    negative_candidates = {
+        t: [idx for idx in all_indices if idx not in event_sets[t]]
+        for t in eligible_tiles
+    }
+    empty_negative_tiles = [t for t, candidates in negative_candidates.items() if not candidates]
+    if empty_negative_tiles:
+        raise ValueError(
+            "Need at least two tiles with O-events for triplet learning; "
+            f"{len(empty_negative_tiles)} eligible tile(s) have no outside-tile negatives."
+        )
 
     # Freeze everything except event_emb.
     for p in model.parameters():
@@ -237,11 +248,7 @@ def train_triplet_metric(
                 t = rng.choice(eligible_tiles)
                 a, p = rng.sample(tile_to_events[t], 2)
                 # Negatives: sample from any other tile.
-                negs = []
-                while len(negs) < n_negatives:
-                    n_cand = rng.choice(all_indices)
-                    if n_cand not in tile_to_events[t]:
-                        negs.append(n_cand)
+                negs = rng.choices(negative_candidates[t], k=n_negatives)
                 anchor_idx.append(a); pos_idx.append(p); neg_idx.append(negs)
 
             anchor_idx = torch.tensor(anchor_idx, device=device)

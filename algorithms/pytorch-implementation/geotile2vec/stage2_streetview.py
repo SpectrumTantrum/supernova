@@ -195,6 +195,20 @@ def train_stage2_triplet(
     eligible = [t for t, sh in tile_to_shot_idxs.items() if sh]
     if not eligible:
         raise ValueError("No tiles have street-view shots; can't run stage 2.")
+    valid_shot_idxs = [
+        idx for idx, tile in enumerate(shot_tiles)
+        if tile in tile_to_row
+    ]
+    negative_candidates = {
+        t: [idx for idx in valid_shot_idxs if shot_tiles[idx] != t]
+        for t in eligible
+    }
+    empty_negative_tiles = [t for t, candidates in negative_candidates.items() if not candidates]
+    if empty_negative_tiles:
+        raise ValueError(
+            "Need street-view shots from at least two fitted tiles for stage 2; "
+            f"{len(empty_negative_tiles)} eligible tile(s) have no different-tile negatives."
+        )
 
     sv_t = torch.tensor(shot_features, dtype=torch.float32, device=device)
     mod = _Stage2Module(V_init, sv_dim).to(device)
@@ -202,7 +216,6 @@ def train_stage2_triplet(
     opt = torch.optim.Adam(mod.parameters(), lr=lr)
 
     losses: list[float] = []
-    all_shot_idxs = list(range(len(shot_tiles)))
     for ep in range(epochs):
         running, n = 0.0, 0
         for _ in range(steps_per_epoch):
@@ -210,11 +223,7 @@ def train_stage2_triplet(
             for _ in range(batch_size):
                 t = rng.choice(eligible)
                 pos = rng.choice(tile_to_shot_idxs[t])
-                negs: list[int] = []
-                while len(negs) < n_negatives:
-                    cand = rng.choice(all_shot_idxs)
-                    if shot_tiles[cand] != t and shot_tiles[cand] in tile_to_row:
-                        negs.append(cand)
+                negs = rng.choices(negative_candidates[t], k=n_negatives)
                 anc_rows.append(tile_to_row[t])
                 pos_idx.append(pos)
                 neg_idx.append(negs)

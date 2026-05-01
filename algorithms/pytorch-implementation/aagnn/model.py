@@ -196,7 +196,9 @@ class AAGNN:
     def load(cls, path: str) -> "AAGNN":
         """Reconstruct an AAGNN from a ``save()`` checkpoint (CPU-loaded)."""
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
-        obj = cls(AAGNNConfig(**ckpt["config"]))
+        cfg = AAGNNConfig(**ckpt["config"])
+        cfg.device = "cpu"
+        obj = cls(cfg)
         obj._feat_dim = ckpt["feat_dim"]
         obj._n = ckpt["n"]
         layer_obj = AbnormalityAwareLayer(

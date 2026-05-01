@@ -68,6 +68,10 @@ def compute_pseudo_labels(
         )
 
     n = X.shape[0]
+    if n < 3:
+        raise ValueError(
+            f"Need at least 3 nodes to keep R, D, and T non-empty; got {n}."
+        )
     H = _forward_no_grad(layer, X, neigh_lists)
     c = H.mean(dim=0).detach()
     d = ((H - c) ** 2).sum(dim=-1)

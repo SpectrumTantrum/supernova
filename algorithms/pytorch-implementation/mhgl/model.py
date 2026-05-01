@@ -141,6 +141,11 @@ class MHGL:
         anom_idx = np.nonzero(labelled & (labels == 1))[0].astype(np.int64)
         if norm_idx.size == 0:
             raise ValueError("No labelled-normal nodes in label_mask — PDE has nothing to cluster.")
+        if anom_idx.size == 0:
+            raise ValueError(
+                "No labelled-anomaly nodes in label_mask — MHGL's repulsion term "
+                "requires q labelled seen anomalies."
+            )
 
         # 4. PDE on labelled normals → patterns.
         patterns = fit_pde(
@@ -220,8 +225,9 @@ class MHGL:
     def predict(self, threshold: float | None = None) -> np.ndarray:
         """Binarise the fit-time anomaly scores.
 
-        Default threshold = median over the union of all high-confidence sets,
-        matching "more anomalous than a typical presumed-normal node".
+        Default threshold = maximum score over the union of all high-confidence
+        presumed-normal sets, so fitted reference normals are not classified as
+        anomalous by construction.
         """
         if self._encoder is None:
             raise RuntimeError("Call fit() first.")
@@ -229,10 +235,10 @@ class MHGL:
         if threshold is None:
             if self._high_conf:
                 pool = np.unique(np.concatenate(self._high_conf))
-                threshold = float(np.median(s[pool]))
+                threshold = float(np.max(s[pool])) if pool.size else float(np.median(s))
             else:
                 threshold = float(np.median(s))
-        return (s >= threshold).astype(np.int64)
+        return (s > threshold).astype(np.int64)
 
     @property
     def history(self) -> dict[str, list[float]]:
@@ -278,6 +284,7 @@ class MHGL:
         cfg_dict = dict(ckpt["config"])
         # tuple round-trip — torch.save serialises tuples as lists in the dict
         cfg_dict["hidden_dims"] = tuple(cfg_dict["hidden_dims"])
+        cfg_dict["device"] = "cpu"
         obj = cls(MHGLConfig(**cfg_dict))
         obj._feat_dim = ckpt["feat_dim"]
         obj._n = ckpt["n"]

@@ -18,18 +18,18 @@ import sys
 from itertools import combinations
 
 import numpy as np
-import torch
+import mlx.core as mx
 from scipy import stats
 
 from data import SyntheticCity
 from model import GeoTile2Vec, GeoTile2VecConfig
 
 
-def cosine_sim_gap_test(V: torch.Tensor, tile_order, tile_to_cluster):
+def cosine_sim_gap_test(V: mx.array, tile_order, tile_to_cluster):
     """Compute mean cosine similarity for same-cluster vs different-cluster
     tile pairs and run a Welch's t-test on the two distributions.
     """
-    V_np = V.cpu().numpy()
+    V_np = np.asarray(V)
     norms = np.linalg.norm(V_np, axis=1, keepdims=True) + 1e-12
     V_unit = V_np / norms
 
@@ -71,7 +71,7 @@ def main() -> int:
     args = ap.parse_args()
 
     print("=" * 64)
-    print("Geo-Tile2Vec — synthetic city smoke test")
+    print("Geo-Tile2Vec - synthetic city smoke test")
     print("=" * 64)
 
     print("\n[1/4] Generating synthetic clustered city…")
@@ -94,7 +94,7 @@ def main() -> int:
 
     use_shots = None if args.no_sv else shots
     if use_shots is not None:
-        # Try Stage 2; if Places365 download fails (offline), fall back to Stage 1 only.
+        # Try Stage 2; if real Places365 extraction is unavailable, fall back to Stage 1 only.
         try:
             print("\n[2/4] Training Stage 1 + Stage 2…")
             model.fit(pois, trajectories, use_shots)
@@ -133,9 +133,9 @@ def main() -> int:
     ok_gap = result["gap"] > 0
     ok_p = result["p_value"] < 0.05
     if ok_gap and ok_p and ok_skipgram and ok_triplet1 and ok_triplet2:
-        print("\n✓ PASS — same-cluster tiles are significantly closer than different-cluster tiles.")
+        print("\nPASS - same-cluster tiles are significantly closer than different-cluster tiles.")
         return 0
-    print("\n✗ FAIL — smoke-test contract not met:")
+    print("\nFAIL - smoke-test contract not met:")
     print(f"    Skip-Gram loss decreased : {ok_skipgram}")
     print(f"    Stage-1 triplet decreased: {ok_triplet1}")
     print(f"    Stage-2 triplet decreased: {ok_triplet2}")

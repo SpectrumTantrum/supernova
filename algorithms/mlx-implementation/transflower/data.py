@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Iterable
 
 import numpy as np
-import torch
+import mlx.core as mx
 
 
 # --- Paper §3.1.1 constants -----------------------------------------------------
@@ -203,7 +203,7 @@ class SyntheticCity:
 
 def prepare_region_tensors(
     regions: list[Region], device: str = "cpu",
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[mx.array, mx.array, mx.array]:
     """Pre-compute feature, distance, and relative-location tensors.
 
     Returns:
@@ -213,10 +213,8 @@ def prepare_region_tensors(
                   east/north meters (origin minus destination, paper §3.1.2)
     """
     N = len(regions)
-    feats = torch.tensor(
-        np.stack([r.feature_vector() for r in regions]),
-        dtype=torch.float32, device=device,
-    )
+    _ = device
+    feats = mx.array(np.stack([r.feature_vector() for r in regions]), dtype=mx.float32)
 
     lats = np.array([r.lat for r in regions], dtype=np.float64)
     lons = np.array([r.lon for r in regions], dtype=np.float64)
@@ -231,17 +229,16 @@ def prepare_region_tensors(
          (lats - mean_lat) * m_per_deg_lat],  # north
         axis=-1,
     ).astype(np.float32)
-    locs_t = torch.tensor(locs_m, device=device)
-    rl_m = locs_t.unsqueeze(1) - locs_t.unsqueeze(0)   # (N, N, 2): rl[i,j] = loc_i - loc_j
+    rl_m = locs_m[:, None, :] - locs_m[None, :, :]   # (N, N, 2): rl[i,j] = loc_i - loc_j
 
-    dist_m = torch.zeros(N, N, dtype=torch.float32, device=device)
+    dist_np = np.zeros((N, N), dtype=np.float32)
     for i, ri in enumerate(regions):
         for j, rj in enumerate(regions):
             if i == j:
                 continue
-            dist_m[i, j] = haversine_meters(ri.lat, ri.lon, rj.lat, rj.lon)
+            dist_np[i, j] = haversine_meters(ri.lat, ri.lon, rj.lat, rj.lon)
 
-    return feats, dist_m, rl_m
+    return feats, mx.array(dist_np, dtype=mx.float32), mx.array(rl_m, dtype=mx.float32)
 
 
 def build_flow_counts(
@@ -249,9 +246,10 @@ def build_flow_counts(
     n_regions: int,
     device: str = "cpu",
     region_id_to_idx: dict[int, int] | None = None,
-) -> torch.Tensor:
+) -> mx.array:
     """Per-origin raw flow count matrix F[i, j] = f_{ij} (paper Def. 2)."""
-    F = torch.zeros(n_regions, n_regions, dtype=torch.float32, device=device)
+    _ = device
+    F_np = np.zeros((n_regions, n_regions), dtype=np.float32)
     for fl in flows:
         if region_id_to_idx is None:
             o_idx, d_idx = fl.o_id, fl.d_id
@@ -266,25 +264,22 @@ def build_flow_counts(
                 f"flow endpoint indices out of range [0, {n_regions}): "
                 f"({o_idx}, {d_idx})"
             )
-        F[o_idx, d_idx] += fl.count
-    return F
+        F_np[o_idx, d_idx] += fl.count
+    return mx.array(F_np, dtype=mx.float32)
 
 
-def build_flow_proportions(F: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+def build_flow_proportions(F: mx.array, eps: float = 1e-12) -> mx.array:
     """Row-normalise to f_{ij}/O_i (paper Eq. 3 input proportions).
 
     Origins with zero observed outflow get a uniform row so the cross-entropy
     over them is well-defined and contributes a constant.
     """
-    row_sums = F.sum(dim=-1, keepdim=True)
-    safe = torch.where(row_sums > 0, row_sums, torch.ones_like(row_sums))
-    P = F / safe.clamp(min=eps)
-    # Empty rows -> uniform.
-    empty = (row_sums.squeeze(-1) <= 0)
-    if empty.any():
-        N = F.shape[-1]
-        P[empty] = 1.0 / N
-    return P
+    row_sums = mx.expand_dims(mx.sum(F, axis=-1), -1)
+    safe = mx.where(row_sums > 0, row_sums, mx.ones_like(row_sums))
+    P = F / mx.maximum(safe, eps)
+    n_regions = F.shape[-1]
+    uniform = mx.ones_like(P) / n_regions
+    return mx.where(row_sums <= 0, uniform, P)
 
 
 def split_flows(
