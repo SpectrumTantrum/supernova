@@ -10,9 +10,10 @@ graph G^t that shares the same label space but lives in a shifted
 attribute distribution. It learns a **shared embedding** that (a)
 classifies source nodes correctly, (b) preserves K-step PPMI proximity
 on each side, and (c) is *domain-invariant* — a discriminator can no
-longer tell source from target. Domain invariance is enforced via a
-gradient-reversal layer (Ganin & Lempitsky 2015), so the encoder,
-classifier, and discriminator all train under one SGD step.
+longer tell source from target. Domain invariance follows the
+gradient-reversal objective from Ganin & Lempitsky 2015; the MLX loop
+implements the encoder sign flip explicitly while updating the encoder,
+classifier, and discriminator once per minibatch iteration.
 
 ## Pipeline
 
@@ -39,17 +40,17 @@ classifier, and discriminator all train under one SGD step.
             ▼                             ▼
    ┌──────────────────┐       ┌─────────────────────────┐
    │ NodeClassifier   │       │ DomainDiscriminator     │
-   │ Eq. 6 — softmax  │       │ GRL → MLP → 2 logits    │
+   │ Eq. 6 — softmax  │       │ GRL objective → logits  │
    │ L_y = CE on G^s  │       │ L_d = CE (0=src,1=tgt)  │
    └────────┬─────────┘       └────────────┬────────────┘
             │                              │
             └──────────────┬───────────────┘
                            ▼
-        L = L_y  +  α·L_p (pairwise, Eq. 5, both sides)
-              +  L_d  ← GRL flips ∂L_d/∂e on the encoder
-                          (Eqs. 11–12: one SGD step
-                           updates encoder, classifier,
-                           AND discriminator at once)
+        Per minibatch iteration:
+            encoder       minimizes L_y + α·L_p − λ_p·L_d
+            classifier    minimizes L_y
+            discriminator minimizes L_d
+        This is the MLX equivalent of the GRL update in Eqs. 11–12.
 
         Schedules (paper §Implementation Details):
             μ_p = μ_0 / (1 + 10p)^0.75       lr decay
@@ -102,8 +103,8 @@ model = ACDNE(ACDNEConfig(n_iters=1000)).fit(net)
 y_t_pred = model.predict()                 # (n_t,) target-side predictions
 print("Micro-F1:", f1_score(net.y_t, y_t_pred, average="micro"))
 
-e_t = model.embed("target")                # learned target embeddings (Eq. 4)
-e_s = model.embed("source")
+e_t = model.embed("target")                # (n_t, embed_dim) embeddings
+e_s = model.embed("source")                # (n_s, embed_dim) embeddings
 probs = model.predict_proba()              # (n_t, n_classes) softmax
 
 # Apply the trained model to a fresh target side (must share feat_dim/n_classes)
@@ -144,17 +145,14 @@ CPU run time. Use `--embed-hidden-dim 512` to match the paper exactly.
 
 ## Critical implementation notes
 
-### One SGD step trains all three modules
+### One minibatch iteration updates all three modules
 
-Adversarial training is usually written as alternating min-max steps. ACDNE
-collapses it to a single SGD update over `params(encoder) ∪ params(classifier)
-∪ params(discriminator)` because the gradient-reversal layer between encoder
-and discriminator sign-flips `∂L_d/∂e` on the way back. The discriminator's
-own parameters get the natural gradient and so are trained to *maximise*
-domain-classification accuracy; the encoder simultaneously gets `−λ ·
-∂L_d/∂e` and so is trained to *fool* the discriminator. This matches paper
-Eq. 12 and the Ganin & Lempitsky 2015 DANN trick exactly. The MLX loop computes the equivalent encoder sign flip explicitly while
-training the classifier and discriminator with their natural objectives.
+Adversarial training is usually written as alternating min-max steps. ACDNE's
+MLX loop uses the same minibatch to update the encoder, classifier, and
+discriminator. The encoder loss is `L_y + α·L_p − λ·L_d`, while the
+classifier and discriminator minimize `L_y` and `L_d` with their natural
+gradients. This matches the gradient-reversal effect in paper Eq. 12 without
+requiring a separate `GradientReversal` module.
 
 ### Shared encoder, not twin encoders
 
@@ -179,8 +177,8 @@ Following Ganin & Lempitsky (DANN), λ ramps from 0 → ~1 as `λ_p =
 2/(1+e^{−10p}) − 1`. Starting at λ = 0 lets the encoder first learn a
 useful classification signal before the adversarial pressure kicks in.
 LR decays as `μ_p = μ_0 / (1+10p)^0.75`. Both schedules are paper
-§Implementation Details and are non-learnable — `GradientReversal.lambda_`
-is a plain Python float, not a Parameter or Buffer.
+§Implementation Details and are non-learnable; `train.py` computes them as
+plain Python floats (`grl_lambda_at`, `lr_at`) and records them in history.
 
 ### Pairwise constraint is within-batch, not full-graph
 

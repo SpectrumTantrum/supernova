@@ -41,22 +41,28 @@ by 10–20 % F1 (Fig. 6).
 | `data.py`               | Dataclasses, lat/lon → tile id, mobility-event builder, synthetic generator |
 | `stage1_mobility.py`    | Skip-Gram model + triplet metric learning + freq-weighted averaging |
 | `stage2_streetview.py`  | Places365 ResNet-18 + IncrementalPCA + Stage-2 triplet trainer    |
-| `model.py`              | `GeoTile2Vec` orchestrator with `fit()` / `embeddings()` / `save()` |
+| `model.py`              | `GeoTile2Vec` orchestrator with `fit()` / `embeddings()` / `embedding_for()` / `save()` / `load()` |
 | `example.py`            | End-to-end smoke test on a synthetic clustered city               |
 
 ## Install & run
 
 ```bash
 pip install -r requirements.txt
-python example.py            # full pipeline (auto-downloads Places365, ~45 MB)
-python example.py --no-sv    # Stage 1 only — no internet needed
+python example.py            # Stage 1 + Stage 2 when Places365 weights are available
+python example.py --no-sv    # Stage 1 only; no torchvision weight download
 ```
 
+If the Places365 checkpoint cannot be downloaded or found in the torch hub
+cache, `example.py` catches that error and reruns the smoke test with Stage 1
+only.
+
 The smoke test plants 4 latent land-use clusters
-(residential / commercial / scenic / educational), trains both stages, then
-runs **Welch's t-test** on cosine similarities of same-cluster vs.
-different-cluster tile pairs. It exits 0 only if same-cluster tiles are
-significantly closer than different-cluster tiles (`p < 0.05`, gap > 0).
+(residential / commercial / scenic / educational), trains Stage 1 and,
+when Places365 ResNet-18 weights are available, Stage 2. It then runs
+**Welch's t-test** on cosine similarities of same-cluster vs.
+different-cluster tile pairs. It exits 0 only if all active loss curves
+decrease and same-cluster tiles are significantly closer than
+different-cluster tiles (`p < 0.05`, gap > 0).
 
 ## Library use
 

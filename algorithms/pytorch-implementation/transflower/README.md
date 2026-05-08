@@ -22,13 +22,19 @@ softmax head emits the probability over destinations.
 
 ```
    ┌────────── Geo-Spatial Encoder (paper §3.1) ──────────┐
-   │ x_o (20)  ─┐                                          │
-   │ x_d (20)  ─┼─ Linear → x_{o,d} (256) ──┐              │     Flow Predictor (§3.2)
-   │ r (1)     ─┘                            ├── concat ── │  ┌───────────────────────┐
-   │ rl (2) ── MultiScale × 2 → FFN × 2 → FFN→ loc_{o,d} ──┘─→│ Transformer × N=2 →   │ → softmax → P_{i,j}
-   │           (3 base vectors @ 2π/3, S=16 scales)         │   FFN head → score    │
-   └───────────────────────────────────────────────────────┘  └───────────────────────┘
+   │ [x_o (20); x_d (20); r (1)] → x_{o,d} (128*) ┐       │
+   │ rl (2) → MultiScale × 2 → FFN × 2 → loc_{o,d} (128*) ├─ concat
+   │        (3 base vectors @ 2π/3, S=16 scales)          │
+   └──────────────────────────────────────────────────────┘
+                         │
+                         ▼
+   ┌──────────── Flow Predictor (§3.2) ────────────┐
+   │ Transformer × N=2 → FFN head → softmax P_{i,j}│
+   └───────────────────────────────────────────────┘
 ```
+
+`*` The paper uses 256-dimensional geographic and RLE branches; the default
+config uses 128 + 128 so `example.py` runs quickly on CPU.
 
 Training objective is the multinomial cross-entropy of paper Eq. 3:
 
@@ -41,7 +47,7 @@ Training objective is the multinomial cross-entropy of paper Eq. 3:
 | `data.py`             | Dataclasses, haversine, synthetic gravity-with-anisotropy city generator  |
 | `geo_encoder.py`      | Geographic feature encoder + multi-scale Space2Vec RLE / RLE'             |
 | `flow_predictor.py`   | Transformer encoder + per-flow softmax head + CPC and CE loss helpers     |
-| `model.py`            | `TransFlower` orchestrator with `fit()` / `predict_distributions()` / `cpc()` / `save()` |
+| `model.py`            | `TransFlower` orchestrator with `fit()` / `predict_distributions()` / `cpc()` / `save()` / `load()` |
 | `example.py`          | End-to-end smoke test on a synthetic clustered city                       |
 
 ## Install & run
