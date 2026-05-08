@@ -1,0 +1,3 @@
+# Real-data adapter deps. torch / numpy / scipy / scikit-learn come from
+# the parent algorithm requirements.txt — install both.
+requests>=2.31

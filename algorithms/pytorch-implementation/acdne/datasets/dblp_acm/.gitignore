@@ -1,0 +1,5 @@
+raw/
+*.mat
+*.gz
+*.zip
+__pycache__/
