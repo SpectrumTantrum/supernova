@@ -42,6 +42,7 @@ class MHGL:
         self._encoder: Optional[GCNEncoder] = None
         self._centres: Optional[mx.array] = None
         self._patterns: list[Pattern] = []
+        self._abnormal_patterns: list[Pattern] = []
         self._high_conf: list[np.ndarray] = []
         self._anom_indices: Optional[np.ndarray] = None
         self._history: dict[str, list[float]] = {"train_losses": [], "val_losses": []}
@@ -69,9 +70,14 @@ class MHGL:
             raise ValueError("No labelled-normal nodes in label_mask — PDE has nothing to cluster.")
         if anom_idx.size == 0:
             raise ValueError("No labelled-anomaly nodes in label_mask — MHGL's repulsion term needs q > 0.")
+        # Algorithm 2 line 2: PDE on labelled normals AND labelled abnormals.
+        # Normal patterns drive Eq. 3.5 centres + Eq. 3.6 contraction; abnormal
+        # patterns are kept as inspectable metadata. Eq. 3.6 repulsion still
+        # uses raw labelled-anomaly indices, so the loss math is unchanged.
         patterns = fit_pde(H0_np, norm_idx, k=cfg.k_normal, u=cfg.pde_split_threshold_u, max_recursion=cfg.pde_max_recursion, seed=cfg.seed)
         if not patterns:
             raise RuntimeError("PDE produced no patterns — check k_normal and labelled-normal count.")
+        abnormal_patterns = fit_pde(H0_np, anom_idx, k=cfg.k_normal, u=cfg.pde_split_threshold_u, max_recursion=cfg.pde_max_recursion, seed=cfg.seed + 1)
         centres = compute_centres(H0, patterns)
         high_conf = [compute_high_confidence(H0, p, centres[i], threshold_t=cfg.high_confidence_t, radius_quantile=cfg.radius_quantile) for i, p in enumerate(patterns)]
         if cfg.verbose:
@@ -80,6 +86,7 @@ class MHGL:
         self._encoder = encoder
         self._centres = centres
         self._patterns = patterns
+        self._abnormal_patterns = abnormal_patterns
         self._high_conf = high_conf
         self._anom_indices = anom_idx
         self._history = history
@@ -118,10 +125,16 @@ class MHGL:
             raise RuntimeError("Call fit() first.")
         return list(self._patterns)
 
+    def abnormal_patterns(self) -> list[Pattern]:
+        """Algorithm 2 line 2 PDE output on labelled abnormals (metadata)."""
+        if self._encoder is None:
+            raise RuntimeError("Call fit() first.")
+        return list(self._abnormal_patterns)
+
     def save(self, path: str) -> None:
         if self._encoder is None:
             raise RuntimeError("Nothing to save — call fit() first.")
-        np.savez(path, config=np.array([self.config.__dict__], dtype=object), centres=np.array(self._centres), patterns=np.array([self._patterns], dtype=object), high_conf=np.array([self._high_conf], dtype=object), anom_indices=self._anom_indices, history=np.array([self._history], dtype=object), scores=self._scores, feat_dim=np.array(self._feat_dim), n=np.array(self._n), params=np.array([self._encoder.parameters()], dtype=object))
+        np.savez(path, config=np.array([self.config.__dict__], dtype=object), centres=np.array(self._centres), patterns=np.array([self._patterns], dtype=object), abnormal_patterns=np.array([self._abnormal_patterns], dtype=object), high_conf=np.array([self._high_conf], dtype=object), anom_indices=self._anom_indices, history=np.array([self._history], dtype=object), scores=self._scores, feat_dim=np.array(self._feat_dim), n=np.array(self._n), params=np.array([self._encoder.parameters()], dtype=object))
 
     @classmethod
     def load(cls, path: str) -> "MHGL":
@@ -137,6 +150,10 @@ class MHGL:
         obj._encoder = encoder
         obj._centres = mx.array(ckpt["centres"])
         obj._patterns = list(ckpt["patterns"][0])
+        try:
+            obj._abnormal_patterns = list(ckpt["abnormal_patterns"][0])
+        except KeyError:
+            obj._abnormal_patterns = []
         obj._high_conf = list(ckpt["high_conf"][0])
         obj._anom_indices = ckpt["anom_indices"]
         obj._history = ckpt["history"][0]

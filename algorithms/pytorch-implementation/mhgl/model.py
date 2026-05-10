@@ -83,6 +83,7 @@ class MHGL:
         self._A_hat: Optional[torch.Tensor] = None
         self._centres: Optional[torch.Tensor] = None
         self._patterns: list[Pattern] = []
+        self._abnormal_patterns: list[Pattern] = []
         self._high_conf: list[np.ndarray] = []
         self._anom_indices: Optional[np.ndarray] = None
         self._history: dict[str, list[float]] = {"train_losses": [], "val_losses": []}
@@ -147,7 +148,10 @@ class MHGL:
                 "requires q labelled seen anomalies."
             )
 
-        # 4. PDE on labelled normals → patterns.
+        # 4. PDE on labelled normals AND labelled abnormals (Algorithm 2 line 2).
+        # Normal patterns drive Eq. 3.5 centres + Eq. 3.6 contraction; abnormal
+        # patterns are exposed as inspectable metadata. Eq. 3.6 repulsion still
+        # uses raw labelled-anomaly indices, so the loss math is unchanged.
         patterns = fit_pde(
             H0_np,
             norm_idx,
@@ -158,6 +162,14 @@ class MHGL:
         )
         if not patterns:
             raise RuntimeError("PDE produced no patterns — check k_normal and labelled-normal count.")
+        abnormal_patterns = fit_pde(
+            H0_np,
+            anom_idx,
+            k=cfg.k_normal,
+            u=cfg.pde_split_threshold_u,
+            max_recursion=cfg.pde_max_recursion,
+            seed=cfg.seed + 1,
+        )
 
         # 5. Centres (Eq. 3.5) — frozen for the rest of training.
         centres = compute_centres(H0, patterns)
@@ -196,6 +208,7 @@ class MHGL:
         self._A_hat = A_hat
         self._centres = centres
         self._patterns = patterns
+        self._abnormal_patterns = abnormal_patterns
         self._high_conf = high_conf
         self._anom_indices = anom_idx
         self._history = history
@@ -251,6 +264,16 @@ class MHGL:
             raise RuntimeError("Call fit() first.")
         return list(self._patterns)
 
+    def abnormal_patterns(self) -> list[Pattern]:
+        """Fine-grained abnormal patterns from the PDE (Algorithm 2 line 2).
+
+        Empty if ``fit`` was never called or PDE failed to produce any
+        components on the labelled-anomaly set.
+        """
+        if self._encoder is None:
+            raise RuntimeError("Call fit() first.")
+        return list(self._abnormal_patterns)
+
     # ------------------------------------------------------------------ I/O
 
     def save(self, path: str) -> None:
@@ -266,6 +289,10 @@ class MHGL:
                 "patterns": [
                     {"indices": p.indices, "posteriors": p.posteriors}
                     for p in self._patterns
+                ],
+                "abnormal_patterns": [
+                    {"indices": p.indices, "posteriors": p.posteriors}
+                    for p in self._abnormal_patterns
                 ],
                 "high_conf": self._high_conf,
                 "anom_indices": self._anom_indices,
@@ -300,6 +327,10 @@ class MHGL:
         obj._patterns = [
             Pattern(indices=p["indices"], posteriors=p["posteriors"])
             for p in ckpt["patterns"]
+        ]
+        obj._abnormal_patterns = [
+            Pattern(indices=p["indices"], posteriors=p["posteriors"])
+            for p in ckpt.get("abnormal_patterns", [])
         ]
         obj._high_conf = ckpt["high_conf"]
         obj._anom_indices = ckpt["anom_indices"]
