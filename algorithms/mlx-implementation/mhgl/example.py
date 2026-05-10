@@ -8,12 +8,24 @@ Run:
 
 Smoke-test contract (exits non-zero unless ALL hold):
     1. Train loss trends down.
-    2. ROC-AUC on V_test ≥ AUC_FLOOR (default 0.75).
-    3. Welch's t-test on V_test scores: anomaly > normal, p < 0.05.
-    4. Welch's t-test on V_test restricted to {normals, unseen-only}:
-       p < 0.05 with positive mean-gap. This statistically gates the
-       paper's main claim that MHGL detects unseen anomaly types, without
-       baking in a brittle threshold-tuned AUC floor.
+    2. Welch's t-test on V_test scores: anomaly > normal, p < 0.05.
+       Paper anchor: MHGL §3.2 Eq. 3.6 contracts normal hyperspheres
+       while pushing anomalies away — the Welch test is the paper-
+       faithful operationalization of that score-distribution claim.
+
+Notes on dropped contracts (per CONTEXT.md D-13 — paper-cited threshold rule):
+- Per-seed `AUC ≥ 0.75` floor: MHGL paper Table 2 reports single point
+  estimates per real dataset (Computer 0.9925, Photo 0.8604, CS 0.8503).
+  No per-seed distribution, no error bars. A per-seed numeric AUC floor
+  is therefore unanchored and is removed. AUC is still computed and
+  printed below as informational.
+- Welch t-test on `{normals, unseen-only}`: MHGL paper Table 3's unseen-
+  anomaly metric is Precision@K (P@400, P@500, P@600), NOT a Welch
+  t-test on score distributions. The Welch-unseen contract was an
+  implementor calibration choice with no paper anchor; dropped per
+  D-13. The user's explicit "Drop AUC — keep paper-cited only" lock
+  applies the same logic to this Welch sub-contract.
+See .planning/phases/00-mlx-in-flight-cleanup/00-11-RESEARCH.md.
 """
 
 from __future__ import annotations
@@ -27,9 +39,6 @@ from sklearn.metrics import roc_auc_score
 
 from data import ANOM_UNSEEN, SyntheticAttributedNetwork
 from model import MHGL, MHGLConfig
-
-
-AUC_FLOOR = 0.75
 
 
 def _short(losses: list[float]) -> str:
@@ -62,7 +71,6 @@ def main() -> int:
                     help="Quantile of F^i distances used as r_i. Paper uses 1.0 (max); "
                          "0.25 tightens H^i so unlabelled-anomaly nodes are less "
                          "likely to be captured at random-init time.")
-    ap.add_argument("--auc-floor", type=float, default=AUC_FLOOR)
     args = ap.parse_args()
 
     print("=" * 64)
@@ -139,44 +147,30 @@ def main() -> int:
         auc_unseen = float("nan")
 
     print(f"  Test-set size:                |V_test| = {len(test_idx)}")
-    print(f"  ROC-AUC on V_test:            {auc_overall:.4f}")
+    print(f"  ROC-AUC on V_test:            {auc_overall:.4f}  (informational — see module docstring)")
     print(f"  ROC-AUC on (V_test ∩ unseen): {auc_unseen:.4f}  (informational)")
     print(f"  Score gap (anom - normal):    {mean_anom - mean_norm:+.4f}")
     print(f"  Welch all-anom vs normal:     t = {t_all:+.3f}   p = {p_all:.2e}")
-    print(f"  Welch unseen vs normal:       t = {t_unseen:+.3f}   p = {p_unseen:.2e}")
+    print(f"  Welch unseen vs normal:       t = {t_unseen:+.3f}   p = {p_unseen:.2e}  (informational — paper metric is P@K)")
 
     train_losses = model.history["train_losses"]
     loss_down = train_losses[-1] < train_losses[0]
-    auc_ok = auc_overall >= args.auc_floor
     gap_ok = mean_anom > mean_norm
     p_all_ok = p_all < 0.05
-    p_unseen_ok = (
-        is_unseen.any()
-        and p_unseen < 0.05
-        and mean_unseen > mean_norm
-    )
 
-    if loss_down and auc_ok and gap_ok and p_all_ok and p_unseen_ok:
-        print("\n✓ PASS — MHGL distinguishes seen + unseen anomalies on the synthetic SBM.")
+    if loss_down and gap_ok and p_all_ok:
+        print("\n✓ PASS — MHGL distinguishes anomalies on the synthetic SBM "
+              "(paper-cited Welch + loss-trend; AUC and unseen-Welch informational).")
         return 0
 
     if not loss_down:
         reason = (f"train loss did not trend down "
                   f"(start={train_losses[0]:.4f}, end={train_losses[-1]:.4f})")
-    elif not auc_ok:
-        reason = f"ROC-AUC {auc_overall:.4f} < floor {args.auc_floor:.4f}"
     elif not gap_ok:
         reason = (f"score gap not positive "
                   f"(anom={mean_anom:.4f}, norm={mean_norm:.4f})")
-    elif not p_all_ok:
-        reason = f"Welch all-anom p-value {p_all:.2e} >= 0.05"
-    elif not is_unseen.any():
-        reason = "no unseen anomalies in V_test — generator misconfigured"
-    elif p_unseen >= 0.05:
-        reason = f"Welch unseen-vs-normal p-value {p_unseen:.2e} >= 0.05"
     else:
-        reason = (f"unseen score gap not positive "
-                  f"(unseen={mean_unseen:.4f}, norm={mean_norm:.4f})")
+        reason = f"Welch all-anom p-value {p_all:.2e} >= 0.05"
     print(f"\n✗ FAIL — {reason}")
     return 1
 

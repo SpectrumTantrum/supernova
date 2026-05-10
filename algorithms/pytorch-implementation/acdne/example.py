@@ -8,15 +8,30 @@ Run:
 
 Smoke-test contract (exits non-zero unless ALL hold):
     1. Source classification loss L_y trends down (start > end).
-    2. Final domain-discriminator accuracy is close to chance —
-       |d_acc - 0.5| <= 0.15, i.e. d_acc in [0.35, 0.65]. Symmetric
-       around 0.5 because a discriminator stuck at, say, 0.32 is just
-       as "domain-fooled" as one stuck at 0.68 — flip its label
-       convention and you recover the same |d_acc - 0.5|.
-    3. Micro-F1 on the unlabelled target network is ≥ --micro-f1-floor
-       (default 0.65 — the paper hits 0.66–0.83 on real cross-network
-       transfers).
-    4. Micro-F1 strictly beats the majority-class baseline.
+       Sanity check; not paper-cited but universal training-progressed
+       gate.
+    2. Micro-F1 on the unlabelled target network strictly beats the
+       majority-class baseline. Paper anchor: ACDNE Table 2 reports
+       Micro-F1 superiority over baselines on 8 cross-network tasks.
+       Per ACDNE §"Cross-network Node Classification": "each comparing
+       algorithm has been repeatedly run 5 times, and the averaged F1
+       scores are reported in Table 2." Single-seed example.py exercises
+       the per-run unit; the phase-gate matrix exercises the seed-
+       averaging spirit by sweeping seeds (0, 1, 2).
+
+Notes on dropped contracts (per CONTEXT.md D-13 — paper-cited threshold rule):
+- `|d_acc - 0.5| <= 0.15` symmetric tolerance: ACDNE Algorithm 1's stop
+  condition is "max iterations." §"Adversarial Domain Adaptation" prose
+  says representations should "fool the domain discriminator" but
+  provides no numeric threshold. The symmetric tolerance was wholly an
+  implementor calibration choice; dropped per D-13. Final d_acc is
+  still printed below as informational.
+- Per-seed `Micro-F1 ≥ 0.65` floor: paper Table 2 reports point-estimate
+  averages-of-5-runs per cross-network task (range 0.6354–0.8327). A
+  per-seed numeric floor on synthetic data is unanchored relative to
+  that protocol; dropped. The "beats majority baseline" contract above
+  is the paper-anchored downstream-task gate.
+See .planning/phases/00-mlx-in-flight-cleanup/00-11-RESEARCH.md.
 """
 
 from __future__ import annotations
@@ -29,9 +44,6 @@ from sklearn.metrics import f1_score
 
 from data import SyntheticCrossNetwork
 from model import ACDNE, ACDNEConfig
-
-
-MICRO_F1_FLOOR = 0.65
 
 
 def _short(losses: list[float]) -> str:
@@ -59,7 +71,6 @@ def main() -> int:
     ap.add_argument("--embed-hidden-dim", type=int, default=256,
                     help="FE hidden dim f(1). Paper uses 512; 256 keeps the "
                          "smoke test fast on CPU and SBM doesn't need 512.")
-    ap.add_argument("--micro-f1-floor", type=float, default=MICRO_F1_FLOOR)
     ap.add_argument("--device", default="cpu")
     args = ap.parse_args()
 
@@ -108,31 +119,20 @@ def main() -> int:
     print(f"  Micro-F1:           {micro:.4f}")
     print(f"  Macro-F1:           {macro:.4f}")
     print(f"  Majority baseline:  {baseline:.4f}")
-    print(f"  Final d_acc (avg):  {final_d_acc:.4f}")
+    print(f"  Final d_acc (avg):  {final_d_acc:.4f}  (informational — see module docstring)")
 
     loss_y = h["loss_y"]
     loss_y_down = loss_y[-1] < loss_y[0]
-    d_acc_tol = 0.15
-    d_acc_balanced = abs(final_d_acc - 0.5) <= d_acc_tol
-    micro_ok = micro >= args.micro_f1_floor
     beats_baseline = micro > baseline
 
-    if loss_y_down and d_acc_balanced and micro_ok and beats_baseline:
-        print("\n✓ PASS — ACDNE transfers source-network labels to the target network.")
+    if loss_y_down and beats_baseline:
+        print("\n✓ PASS — ACDNE transfers source-network labels to the target network "
+              "(paper-cited Micro-F1 > majority + L_y trend; d_acc informational).")
         return 0
 
     if not loss_y_down:
         reason = (
             f"L_y did not decrease (start={loss_y[0]:.4f}, end={loss_y[-1]:.4f})"
-        )
-    elif not d_acc_balanced:
-        reason = (
-            f"final domain-discriminator accuracy {final_d_acc:.4f} "
-            f"outside |d_acc - 0.5| <= {d_acc_tol:.2f} — adversarial game did not converge"
-        )
-    elif not micro_ok:
-        reason = (
-            f"Micro-F1 {micro:.4f} < floor {args.micro_f1_floor:.4f}"
         )
     else:
         reason = (

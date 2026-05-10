@@ -8,9 +8,19 @@ Run:
 
 Smoke-test contract (exits non-zero unless ALL hold):
     1. Both train and validation losses trend down.
-    2. ROC-AUC on the test set T = V - S is >= AUC_FLOOR (default 0.75).
-    3. Welch's t-test on the score distributions: anomaly scores are
+    2. Welch's t-test on the score distributions: anomaly scores are
        significantly larger than normal scores (p < 0.05, mean-gap > 0).
+       Paper anchor: AAGNN §3 establishes that anomaly representations
+       are "mapped to faraway regions" relative to normals; the Welch
+       test is the paper-faithful operationalization of that claim.
+
+Note on the AUC contract: AAGNN paper Table 2 (CIKM 2021) reports
+single point estimates per real dataset (BlogCatalog 0.8171–0.8184,
+Flickr 0.8299–0.8456, PubMed 0.8459–0.8564) — no per-seed distribution,
+no error bars. A per-seed numeric AUC floor is therefore unanchored;
+removed per CONTEXT.md D-13 (paper-cited threshold rule) — see
+.planning/phases/00-mlx-in-flight-cleanup/00-11-RESEARCH.md. AUC is
+still computed and printed below as informational.
 """
 
 from __future__ import annotations
@@ -24,9 +34,6 @@ from sklearn.metrics import roc_auc_score
 
 from data import SyntheticAttributedNetwork
 from model import AAGNN, AAGNNConfig
-
-
-AUC_FLOOR = 0.75       # smoke-test pass threshold (paper reports 0.82-0.85 on real data)
 
 
 def _short(losses: list[float]) -> str:
@@ -46,7 +53,6 @@ def main() -> int:
     ap.add_argument("--hidden-dim", type=int, default=64,
                     help="Smaller than paper's 256 to keep the smoke test fast on CPU; "
                          "SBM doesn't need full capacity.")
-    ap.add_argument("--auc-floor", type=float, default=AUC_FLOOR)
     args = ap.parse_args()
 
     print("=" * 64)
@@ -95,7 +101,7 @@ def main() -> int:
     p_value = float(p_value)
 
     print(f"  Test-set size:        |T| = {len(T)}, of which {anom_in_T} are true anomalies")
-    print(f"  ROC-AUC on T:         {auc_T:.4f}")
+    print(f"  ROC-AUC on T:         {auc_T:.4f}  (informational — see module docstring)")
     print(f"  Score gap (anomaly - normal):  {mean_anom - mean_norm:+.4f}")
     print(f"  Welch's t-test:       t = {t_stat:+.3f}   p = {p_value:.2e}")
 
@@ -103,11 +109,10 @@ def main() -> int:
     val_losses = model.history["val_losses"]
     train_loss_down = train_losses[-1] < train_losses[0]
     val_loss_down = val_losses[-1] < val_losses[0]
-    auc_ok = auc_T >= args.auc_floor
     gap_ok = mean_anom > mean_norm
     p_ok = p_value < 0.05
 
-    if auc_ok and gap_ok and p_ok and train_loss_down and val_loss_down:
+    if gap_ok and p_ok and train_loss_down and val_loss_down:
         print("\n✓ PASS — AAGNN distinguishes injected anomalies on the synthetic SBM.")
         return 0
 
@@ -117,8 +122,6 @@ def main() -> int:
     elif not val_loss_down:
         reason = (f"validation loss did not trend down "
                   f"(start={val_losses[0]:.4f}, end={val_losses[-1]:.4f})")
-    elif not auc_ok:
-        reason = f"ROC-AUC {auc_T:.4f} < floor {args.auc_floor:.4f}"
     elif not gap_ok:
         reason = (f"score gap not positive "
                   f"(anom={mean_anom:.4f}, norm={mean_norm:.4f})")
