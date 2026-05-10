@@ -1,5 +1,6 @@
 # Local research papers (paywalled, do not publish)
 .research/
+research/
 
 # macOS
 .DS_Store
@@ -24,3 +25,4 @@ env/
 
 # Plan / scratch
 .claude/
+.planning/
