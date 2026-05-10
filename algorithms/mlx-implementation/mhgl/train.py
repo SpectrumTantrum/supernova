@@ -6,6 +6,7 @@ import numpy as np
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
+from mlx.utils import tree_flatten
 
 from gcn import GCNEncoder
 from pde import Pattern
@@ -82,19 +83,12 @@ def train_mhgl(encoder: GCNEncoder, X: mx.array, A_hat: mx.array, centres: mx.ar
         H = model(X, A_hat)
         mix = [mixup_pseudo_labels(H, hi, augmentation_alpha * hi.shape[0], rng) for hi in high_conf]
         loss = mhgl_loss(H, centres, high_conf, mix, anom_indices, sigma=sigma, eps=eps)
+        # Eq. 3.6 + (lambda/2) ||Theta||_F^2 — paper-literal summand,
+        # equivalent to PyTorch's `Adam(weight_decay=)` (L2-on-grad).
         if weight_decay:
             l2 = mx.array(0.0)
-            def add_params(tree):
-                nonlocal l2
-                if isinstance(tree, dict):
-                    for v in tree.values():
-                        add_params(v)
-                elif isinstance(tree, list):
-                    for v in tree:
-                        add_params(v)
-                else:
-                    l2 = l2 + mx.sum(tree * tree)
-            add_params(model.trainable_parameters())
+            for _, p in tree_flatten(model.trainable_parameters()):
+                l2 = l2 + mx.sum(p * p)
             loss = loss + 0.5 * weight_decay * l2
         return loss
 

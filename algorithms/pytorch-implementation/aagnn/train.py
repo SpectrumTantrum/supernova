@@ -9,8 +9,9 @@ Implements Algorithm 1:
                   R (train) and D (val); test set T = V - S.
     Lines 6-10 -> train_aagnn: SGD/Adam minimisation of Eq. 5
                       L = (1/|R|) * sum_{i in R} ||h_i - c||^2 + (lambda/2) ||Theta||_F^2
-                  with the L2 term delegated to the optimiser's weight_decay
-                  arg, per the standard Deep SVDD treatment (Ruff et al. 2018).
+                  with the L2 term added explicitly to the loss (paper Eq. 5
+                  literal form) so the PyTorch and MLX backends are bit-for-bit
+                  numerically equivalent.
     Eq. 6      -> anomaly_scores: s(i) = ||h_i - c||^2.
 
 The hypersphere centre c is computed once from the random-init forward pass
@@ -132,9 +133,9 @@ def train_aagnn(
     D_t = torch.as_tensor(D_idx, dtype=torch.long, device=device)
 
     if optimizer == "adam":
-        opt = torch.optim.Adam(layer.parameters(), lr=lr, weight_decay=weight_decay)
+        opt = torch.optim.Adam(layer.parameters(), lr=lr)
     else:
-        opt = torch.optim.SGD(layer.parameters(), lr=lr, weight_decay=weight_decay)
+        opt = torch.optim.SGD(layer.parameters(), lr=lr)
 
     train_losses: list[float] = []
     val_losses: list[float] = []
@@ -143,7 +144,14 @@ def train_aagnn(
     for epoch in range(epochs):
         layer.train()
         H = layer(X, neigh_lists)
-        loss = ((H[R_t] - c) ** 2).sum(dim=-1).mean()
+        data_loss = ((H[R_t] - c) ** 2).sum(dim=-1).mean()
+        # Eq. 5: + (lambda/2) ||Theta||_F^2 — explicit so MLX and PyTorch
+        # backends compute the same loss curve at numerical precision.
+        if weight_decay:
+            l2 = sum((p * p).sum() for p in layer.parameters())
+            loss = data_loss + 0.5 * weight_decay * l2
+        else:
+            loss = data_loss
         opt.zero_grad()
         loss.backward()
         opt.step()

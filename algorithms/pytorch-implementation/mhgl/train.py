@@ -246,7 +246,7 @@ def train_mhgl(
     if augmentation_alpha < 0:
         raise ValueError(f"augmentation_alpha must be >= 0, got {augmentation_alpha}")
 
-    opt = torch.optim.Adam(encoder.parameters(), lr=lr, weight_decay=weight_decay)
+    opt = torch.optim.Adam(encoder.parameters(), lr=lr)
     rng = np.random.default_rng(seed)
 
     train_losses: list[float] = []
@@ -261,10 +261,16 @@ def train_mhgl(
             mixup_pseudo_labels(H, hi, augmentation_alpha * hi.shape[0], rng)
             for hi in high_conf
         ]
-        loss = mhgl_loss(
+        data_loss = mhgl_loss(
             H, centres, high_conf, mixup_per_pattern, anom_indices,
             sigma=sigma, eps=eps,
         )
+        # Eq. 3.6 + (lambda/2) ||Theta||_F^2 — explicit summand, paper-literal.
+        if weight_decay:
+            l2 = sum((p * p).sum() for p in encoder.parameters())
+            loss = data_loss + 0.5 * weight_decay * l2
+        else:
+            loss = data_loss
         opt.zero_grad()
         loss.backward()
         opt.step()
