@@ -22,6 +22,55 @@ from flow_predictor import FlowPredictor, common_part_of_commuters, flow_cross_e
 from geo_encoder import GeoSpatialEncoder
 
 
+class RMSpropMomentum(optim.Optimizer):
+    r"""RMSprop with momentum — paper §4.1.3 prescribes RMSprop momentum=0.9.
+
+    .. math::
+        v_{t+1} &= \alpha v_t + (1 - \alpha) g_t^2 \\
+        b_{t+1} &= \mu b_t + g_t / (\sqrt{v_{t+1}} + \epsilon) \\
+        w_{t+1} &= w_t - \lambda b_{t+1}
+
+    MLX's built-in :class:`mlx.optimizers.RMSprop` lacks a momentum buffer,
+    so we subclass :class:`Optimizer` to match PyTorch's RMSprop semantics
+    (and therefore the paper's optimizer) exactly.
+    """
+
+    def __init__(
+        self,
+        learning_rate: float,
+        alpha: float = 0.99,
+        eps: float = 1e-8,
+        momentum: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self._maybe_schedule("learning_rate", learning_rate)
+        if alpha < 0.0:
+            raise ValueError(f"alpha must be >=0, got {alpha}")
+        if eps < 0.0:
+            raise ValueError(f"eps must be >=0, got {eps}")
+        if momentum < 0.0:
+            raise ValueError(f"momentum must be >=0, got {momentum}")
+        self.alpha = alpha
+        self.eps = eps
+        self.momentum = momentum
+
+    def init_single(self, parameter: mx.array, state: dict) -> None:
+        state["v"] = mx.zeros_like(parameter)
+        if self.momentum > 0.0:
+            state["b"] = mx.zeros_like(parameter)
+
+    def apply_single(self, gradient: mx.array, parameter: mx.array, state: dict) -> mx.array:
+        lr = self.learning_rate.astype(gradient.dtype)
+        v = self.alpha * state["v"] + (1.0 - self.alpha) * mx.square(gradient)
+        state["v"] = v
+        normalised = gradient / (mx.sqrt(v) + self.eps)
+        if self.momentum > 0.0:
+            b = self.momentum * state["b"] + normalised
+            state["b"] = b
+            return parameter - lr * b
+        return parameter - lr * normalised
+
+
 @dataclass
 class TransFlowerConfig:
     # Encoder dims (paper §3.1: d_geo = d_loc = 256, d_model = 512).
@@ -108,7 +157,7 @@ class TransFlower:
 
         self._build_modules()
         assert self._net is not None
-        opt = optim.RMSprop(learning_rate=cfg.lr, alpha=cfg.momentum)
+        opt = RMSpropMomentum(learning_rate=cfg.lr, momentum=cfg.momentum)
 
         best_val_cpc = -float("inf")
         best_state: dict | None = None

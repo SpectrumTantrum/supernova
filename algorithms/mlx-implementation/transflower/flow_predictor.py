@@ -37,7 +37,17 @@ class FlowPredictor(nn.Module):
         )
 
     def __call__(self, e: mx.array, dest_padding_mask: mx.array | None = None) -> mx.array:
-        h = self.transformer(e, None)
+        """e: (B, N, d_model). dest_padding_mask: (B, N) bool, True at padded slots.
+
+        Padded keys are excluded from attention via an additive (B, 1, 1, N)
+        mask of -inf, then forced to probability 0 in the final softmax.
+        """
+        attn_mask = None
+        if dest_padding_mask is not None:
+            neg_inf = mx.array(-1e9, dtype=e.dtype)
+            zero = mx.array(0.0, dtype=e.dtype)
+            attn_mask = mx.where(dest_padding_mask[:, None, None, :], neg_inf, zero)
+        h = self.transformer(e, attn_mask)
         scores = mx.squeeze(self.head(h), axis=-1)
         if dest_padding_mask is not None:
             scores = mx.where(dest_padding_mask, mx.array(-mx.inf, dtype=scores.dtype), scores)
