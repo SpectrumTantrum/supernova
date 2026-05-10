@@ -12,19 +12,21 @@ Implements Algorithm 2 end-to-end:
     Lines 8-15: per epoch, sample alpha * |H^i| mixup pseudo-labels via
                 Eq. 3.8 inside each H^i, compute the multi-hypersphere
                 objective (Eq. 3.6), step Adam.
-    Eq. 3.6:    sum_i mean_{j in D_i} ||h_j - c_i||^2  (real members + mixups)
+    Eq. 3.6:    (1/(p*n)) sum_i sum_{j in D_i} ||h_j - c_i||^2
                 + (sigma / (q*p)) sum_{r,i} (||h_r - c_i||^2 + eps)^{-1}
-                The L2 / Frobenius regulariser is delegated to the optimiser's
-                weight_decay arg per the standard treatment. ``eps`` guards
-                against gradient blow-up at init when an anomaly happens to
-                land on a centre.
+                + (lambda/2) ||Theta||_F^2
+                The first term is a *pooled* mean over every (i, j) pair so
+                large patterns weigh proportionally — paper-literal form,
+                not the per-pattern-mean shortcut. ``eps`` guards against
+                gradient blow-up at init when an anomaly lands on a centre.
+                The L2 / Frobenius regulariser is added explicitly to the
+                loss for backend-agnostic numerical equivalence.
     Eq. 3.7:    s(v_j) = min_i ||h_j - c_i||^2 over normal centres only.
 
-Note on the abnormal PDE call: Algorithm 2 line 2 mentions running PDE on
-abnormal nodes too, but Eq. 3.6 only uses normal centres (the second term
-uses labelled-anomaly raw indices, not abnormal patterns). To match the loss
-equation exactly we run PDE only on labelled normals; labelled anomalies
-enter the loss as raw node indices.
+Algorithm 2 line 2 also runs PDE on labelled abnormals; the orchestrator
+(model.py) exposes those as ``abnormal_patterns`` for inspection. Eq. 3.6's
+repulsion term uses raw labelled-anomaly indices (not abnormal-pattern
+centres), so the loss math is unaffected.
 """
 
 from __future__ import annotations
@@ -162,15 +164,16 @@ def mhgl_loss(
     sigma: float,
     eps: float,
 ) -> torch.Tensor:
-    """Eq. 3.6 (Frobenius L2 term delegated to optimiser weight_decay):
+    """Eq. 3.6 contraction + repulsion (Frobenius L2 added by ``train_mhgl``):
 
-        loss = (1/p) * mean_i [ mean_{j in D_i} ||h_j - c_i||^2 ]
-             + (sigma / (q*p)) * sum_{r in anom} sum_{i in 1..p} (||h_r - c_i||^2 + eps)^{-1}
+        contraction = (1/(p*n)) * sum_i sum_{j in D_i} ||h_j - c_i||^2
+        repulsion   = (sigma / (q*p)) * sum_{r in anom} sum_{i in 1..p}
+                      (||h_r - c_i||^2 + eps)^{-1}
 
-    The first term is the per-pattern *mean* squared distance over D_i (real
-    H^i members + mixup pseudo-labels), then averaged over patterns. This is
-    a faithful but stable reading of the paper's "(1/(p*n))" prefactor —
-    weighting per-pattern means equally regardless of |H^i| imbalance.
+    The contraction is a *pooled* mean over every (i, j) pair — every
+    member of every D_i contributes the same weight, so large patterns
+    are not down-weighted by being averaged inside their own bucket
+    first. This is the paper-literal reading of "(1/(p*n))".
     """
     p = centres.shape[0]
     if p == 0:
@@ -181,8 +184,8 @@ def mhgl_loss(
             f"({len(mixup_per_pattern)}) must each have length p={p}"
         )
 
-    # First term — contraction.
-    contraction_terms = []
+    # First term — contraction (pooled mean over every (i, j) pair).
+    pair_sq_dists: list[torch.Tensor] = []
     for i in range(p):
         c_i = centres[i]
         members_real = high_conf[i]
@@ -196,11 +199,11 @@ def mhgl_loss(
         if not chunks:
             continue
         D_i = torch.cat(chunks, dim=0)  # (n_i, d)
-        contraction_terms.append(((D_i - c_i) ** 2).sum(dim=-1).mean())
-    if not contraction_terms:
-        contraction = H.new_zeros(())
+        pair_sq_dists.append(((D_i - c_i) ** 2).sum(dim=-1))
+    if pair_sq_dists:
+        contraction = torch.cat(pair_sq_dists, dim=0).mean()
     else:
-        contraction = torch.stack(contraction_terms).mean()
+        contraction = H.new_zeros(())
 
     # Second term — repulsion (only if there are labelled anomalies).
     if anom_indices.size > 0:

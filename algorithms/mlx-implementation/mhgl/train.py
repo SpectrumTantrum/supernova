@@ -48,8 +48,9 @@ def mixup_pseudo_labels(H: mx.array, high_conf_indices: np.ndarray, n_samples: i
 
 
 def mhgl_loss(H: mx.array, centres: mx.array, high_conf: list[np.ndarray], mixup_per_pattern: list[mx.array], anom_indices: np.ndarray, *, sigma: float, eps: float) -> mx.array:
+    """Eq. 3.6 contraction (pooled mean over all (i, j) pairs) + repulsion."""
     p = centres.shape[0]
-    terms = []
+    pair_sq_dists: list[mx.array] = []
     for i in range(p):
         chunks = []
         if high_conf[i].size > 0:
@@ -58,8 +59,8 @@ def mhgl_loss(H: mx.array, centres: mx.array, high_conf: list[np.ndarray], mixup
             chunks.append(mixup_per_pattern[i])
         if chunks:
             D_i = mx.concatenate(chunks, axis=0)
-            terms.append(mx.mean(mx.sum((D_i - centres[i]) ** 2, axis=-1)))
-    contraction = mx.mean(mx.stack(terms)) if terms else mx.array(0.0)
+            pair_sq_dists.append(mx.sum((D_i - centres[i]) ** 2, axis=-1))
+    contraction = mx.mean(mx.concatenate(pair_sq_dists, axis=0)) if pair_sq_dists else mx.array(0.0)
     if anom_indices.size > 0:
         H_anom = H[mx.array(anom_indices, dtype=mx.int32)]
         diff = H_anom[:, None, :] - centres[None, :, :]
