@@ -68,19 +68,19 @@ hierarchies. Aim for 5–8 source files per algorithm.
 2. Create `algorithms/pytorch-implementation/<name>/` (or `mlx-implementation/`) with the files listed in the layout above.
 3. Implement to paper fidelity; cite sections in docstrings.
 4. Write a synthetic generator + smoke test that exits 0 on success.
-5. Verify: `cd algorithms/pytorch-implementation/<name> && python example.py`.
+5. Verify: `cd algorithms/<framework>/<name> && python example.py`.
 6. Update the **Existing algorithms** table below.
 7. Tag a release: `gh release create vX.Y.0 --generate-notes`.
 
 ## Existing algorithms
 
-| Algorithm    | Paper                                                                 | Folder                       |
-|--------------|-----------------------------------------------------------------------|------------------------------|
-| Geo-Tile2Vec | Luo et al., *ACM TSAS* 9(2) Article 10, 2023 (doi:10.1145/3571741)    | `algorithms/pytorch-implementation/geotile2vec/` |
-| TransFlower  | Luo et al., arXiv:2402.15398v1, 2024                                  | `algorithms/pytorch-implementation/transflower/` |
-| AAGNN        | Zhou et al., *CIKM '21*, 2021 (doi:10.1145/3459637.3482195)           | `algorithms/pytorch-implementation/aagnn/`       |
-| MHGL         | Zhou et al., *SIAM SDM 2022* (unseen anomaly detection on networks)   | `algorithms/pytorch-implementation/mhgl/`        |
-| ACDNE        | Shen et al., *AAAI 2020* (cross-network node classification)          | `algorithms/pytorch-implementation/acdne/`       |
+| Algorithm    | Paper                                                                 | PyTorch folder               | MLX folder                   |
+|--------------|-----------------------------------------------------------------------|------------------------------|------------------------------|
+| Geo-Tile2Vec | Luo et al., *ACM TSAS* 9(2) Article 10, 2023 (doi:10.1145/3571741)    | `algorithms/pytorch-implementation/geotile2vec/` | `algorithms/mlx-implementation/geotile2vec/` |
+| TransFlower  | Luo et al., arXiv:2402.15398v1, 2024                                  | `algorithms/pytorch-implementation/transflower/` | `algorithms/mlx-implementation/transflower/` |
+| AAGNN        | Zhou et al., *CIKM '21*, 2021 (doi:10.1145/3459637.3482195)           | `algorithms/pytorch-implementation/aagnn/`       | `algorithms/mlx-implementation/aagnn/`       |
+| MHGL         | Zhou et al., *SIAM SDM 2022* (unseen anomaly detection on networks)   | `algorithms/pytorch-implementation/mhgl/`        | `algorithms/mlx-implementation/mhgl/`        |
+| ACDNE        | Shen et al., *AAAI 2020* (cross-network node classification)          | `algorithms/pytorch-implementation/acdne/`       | `algorithms/mlx-implementation/acdne/`       |
 
 ## Cross-agent setup
 

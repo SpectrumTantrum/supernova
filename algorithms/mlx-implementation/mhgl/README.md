@@ -1,6 +1,6 @@
 # MHGL
 
-PyTorch implementation of **Unseen Anomaly Detection on Networks via
+MLX implementation of **Unseen Anomaly Detection on Networks via
 Multi-Hpersphere Learning** [sic — paper title misspells "Hypersphere"]
 — Shuang Zhou, Xiao Huang, Ninghao Liu, Qiaoyu Tan, Fu-Lai Chung,
 *SIAM SDM 2022*.
@@ -102,8 +102,8 @@ It exits 0 only if **all four** hold:
    anomaly types never seen at training — without baking in a
    threshold-tuned AUC floor.
 
-A typical seed-0 run produces ROC-AUC ≈ 0.93 on V_test and ≈ 0.90 on the
-unseen-only subset.
+A typical seed-0 run should clear both the gated ROC-AUC and unseen-anomaly
+t-test checks; exact AUCs vary with MLX, NumPy, and scikit-learn versions.
 
 ### Seed sensitivity
 
@@ -138,8 +138,8 @@ print("AUC on V_test:", roc_auc_score(net.labels[test_idx], scores[test_idx]))
 other = SyntheticAttributedNetwork(seed=1).generate()
 scores_other = model.score(other)
 
-model.save("./mhgl.pt")
-loaded = MHGL.load("./mhgl.pt")
+model.save("./mhgl.npz")
+loaded = MHGL.load("./mhgl.npz")
 ```
 
 `AttributedNetwork` is a frozen dataclass holding `X` (n × f features),
@@ -166,7 +166,7 @@ defining the V_train ↔ V_test partition per paper §2.
 | `eps_repulsion` | 1e-6 | —    | numerical guard on inverse-distance (paper silent)     |
 
 The smoke test (`example.py`) overrides `hidden_dims=(64,32,16,16)`,
-`k_normal=3`, `epochs=80`, and `radius_quantile=0.5` to keep the run
+`k_normal=3`, `epochs=80`, and `radius_quantile=0.25` to keep the run
 fast on CPU and to compensate for the small synthetic's sensitivity to
 random init. Use `--hidden-dims 256,128,64,32 --epochs 300
 --radius-quantile 1.0` for the paper-faithful configuration.
@@ -215,6 +215,6 @@ match the loss exactly, we run PDE only on labelled-normal nodes.
 - Comparative baselines from §4.2 (SPARC, DeepSAD, OpenWGL, GDN,
   OCGNN). The portfolio implements algorithms, not benchmark suites.
 - Ablation variants from §4.5 (MHGL-, HGL, HGL-).
-- A PyG / DGL wrapping. The implementation uses `torch.sparse_coo_tensor`
-  for the GCN propagation matrix — fine for graphs up to a few thousand
-  nodes; rewrite with PyG / DGL message passing if you need to scale.
+- A PyG / DGL wrapping. The implementation uses a dense MLX array for the
+  normalized GCN propagation matrix — fine for graphs up to a few thousand
+  nodes; rewrite with sparse message passing if you need to scale.

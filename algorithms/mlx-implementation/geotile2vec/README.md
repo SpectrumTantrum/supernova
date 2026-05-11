@@ -1,6 +1,6 @@
 # Geo-Tile2Vec
 
-PyTorch implementation of **Geo-Tile2Vec: A Multi-Modal and Multi-Stage
+MLX implementation of **Geo-Tile2Vec: A Multi-Modal and Multi-Stage
 Embedding Framework for Urban Analytics** — Yan Luo et al., *ACM Trans.
 Spatial Algorithms Syst.* 9(2) Article 10, April 2023.
 <https://doi.org/10.1145/3571741>
@@ -26,9 +26,10 @@ by 10–20 % F1 (Fig. 6).
                 Stage 1                                        Stage 2
    ┌─────────────────────────────────┐               ┌────────────────────────┐
    │ POI + trajectory                │               │ Street view (4-dir)    │
-   │   → Mobility events (50 m snap) │               │   → Places365 ResNet18 │
-   │   → Skip-Gram with neg. samples │               │   → PCA 512 → 128      │
-   │   → Triplet loss (semi-hard)    │               │   → concat 4 → 512     │
+   │   → Mobility events (50 m snap) │               │   → image stats or     │
+   │   → Skip-Gram with neg. samples │               │     precomputed feats  │
+   │   → Triplet loss (semi-hard)    │               │   → PCA 512 → <=128    │
+   │                                  │               │   → concat 4 → 512     │
    │   → freq-weighted average       │  v_i (300d) → │   → Triplet loss + W   │
    └─────────────────────────────────┘               │   → V_final (300d)     │
                                                      └────────────────────────┘
@@ -40,23 +41,29 @@ by 10–20 % F1 (Fig. 6).
 |-------------------------|-------------------------------------------------------------------|
 | `data.py`               | Dataclasses, lat/lon → tile id, mobility-event builder, synthetic generator |
 | `stage1_mobility.py`    | Skip-Gram model + triplet metric learning + freq-weighted averaging |
-| `stage2_streetview.py`  | Places365 ResNet-18 + IncrementalPCA + Stage-2 triplet trainer    |
-| `model.py`              | `GeoTile2Vec` orchestrator with `fit()` / `embeddings()` / `save()` |
+| `stage2_streetview.py`  | Offline image-statistic or precomputed feature path + IncrementalPCA + Stage-2 triplet trainer |
+| `model.py`              | `GeoTile2Vec` orchestrator with `fit()` / `embeddings()` / `embedding_for()` / `save()` / `load()` |
 | `example.py`            | End-to-end smoke test on a synthetic clustered city               |
 
 ## Install & run
 
 ```bash
 pip install -r requirements.txt
-python example.py            # full pipeline (auto-downloads Places365, ~45 MB)
-python example.py --no-sv    # Stage 1 only — no internet needed
+python example.py            # Stage 1 + offline Stage 2 image-statistic path
+python example.py --no-sv    # Stage 1 only
 ```
 
+The MLX port does not auto-download Places365 weights. By default, Stage 2
+derives deterministic 512-d image-statistic features from the synthetic
+street-view arrays. For real Places365 features, pass a precomputed
+`(len(shots) * 4, feature_dim)` array to `fit(..., precomputed_image_features=...)`.
+
 The smoke test plants 4 latent land-use clusters
-(residential / commercial / scenic / educational), trains both stages, then
-runs **Welch's t-test** on cosine similarities of same-cluster vs.
-different-cluster tile pairs. It exits 0 only if same-cluster tiles are
-significantly closer than different-cluster tiles (`p < 0.05`, gap > 0).
+(residential / commercial / scenic / educational), trains Stage 1 and,
+unless `--no-sv` is used, the offline Stage 2 path, then runs **Welch's
+t-test** on cosine similarities of same-cluster vs. different-cluster tile
+pairs. It exits 0 only if all loss curves decrease and same-cluster tiles
+are significantly closer than different-cluster tiles (`p < 0.05`, gap > 0).
 
 ## Library use
 
@@ -67,12 +74,14 @@ from model import GeoTile2Vec, GeoTile2VecConfig
 cfg = GeoTile2VecConfig(d_event=300, margin1=1.0, margin2=2.0)
 model = GeoTile2Vec(cfg).fit(my_pois, my_trajectories, my_shots)
 V, tile_order = model.embeddings()       # V.shape == (n_tiles, 300)
-model.save("./geotile2vec.pt")
+model.save("./geotile2vec.npz")
 ```
 
 `shots` is optional — pass `None` (or omit) to run **Stage 1 only**, useful
-when no street-view imagery is available. `POI`, `Trajectory`, and
-`StreetViewShot` are simple dataclasses defined in `data.py`.
+when no street-view imagery is available. With `shots`, the MLX default uses
+offline image-statistic features unless precomputed image features are passed.
+`POI`, `Trajectory`, and `StreetViewShot` are simple dataclasses defined in
+`data.py`.
 
 ## Hyperparameters (paper §4.1)
 
@@ -86,7 +95,7 @@ when no street-view imagery is available. `POI`, `Trajectory`, and
 | `m'`   | 2     | Stage-2 triplet margin                                 |
 | —      | 16    | POI categories (Table A.1)                             |
 | —      | 24    | hourly time buckets                                    |
-| —      | 128   | per-image PCA components                               |
+| —      | 128   | maximum per-image PCA components (clamped by sample count) |
 
 ## Critical dim split (worth knowing)
 

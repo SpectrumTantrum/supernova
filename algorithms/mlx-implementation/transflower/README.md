@@ -1,6 +1,6 @@
 # TransFlower
 
-PyTorch implementation of **TransFlower: An Explainable Transformer-Based
+MLX implementation of **TransFlower: An Explainable Transformer-Based
 Model with Flow-to-Flow Attention for Commuting Flow Prediction** —
 Yan Luo et al., arXiv:2402.15398v1, Feb 2024.
 <https://arxiv.org/abs/2402.15398>
@@ -41,7 +41,7 @@ Training objective is the multinomial cross-entropy of paper Eq. 3:
 | `data.py`             | Dataclasses, haversine, synthetic gravity-with-anisotropy city generator  |
 | `geo_encoder.py`      | Geographic feature encoder + multi-scale Space2Vec RLE / RLE'             |
 | `flow_predictor.py`   | Transformer encoder + per-flow softmax head + CPC and CE loss helpers     |
-| `model.py`            | `TransFlower` orchestrator with `fit()` / `predict_distributions()` / `cpc()` / `save()` |
+| `model.py`            | `TransFlower` orchestrator with `fit()` / `predict_distributions()` / `cpc()` / `save()` / `load()` |
 | `example.py`          | End-to-end smoke test on a synthetic clustered city                       |
 
 ## Install & run
@@ -83,9 +83,9 @@ cfg = TransFlowerConfig(
     epochs=30,
 )
 model = TransFlower(cfg).fit(regions, train_flows, val_flows)
-P = model.predict_distributions(regions)            # (N, N) probabilities
+P = model.predict_distributions(regions)            # mx.array, shape (N, N)
 cpc = model.cpc(regions, val_flows)                 # eq. 4
-model.save("./transflower.pt")
+model.save("./transflower.npz")
 ```
 
 ## Hyperparameters (paper §4.1.3)
@@ -102,7 +102,7 @@ model.save("./transflower.pt")
 | λ_min                  | 1 m         | from data    | smallest spatial scale                   |
 | λ_max                  | study diam. | from data    | largest spatial scale                    |
 | `n_destinations`       | 256         | full N       | candidate destinations per origin        |
-| seed                   | 1234        | 1234         | torch + numpy                            |
+| seed                   | 1234        | 1234         | MLX + numpy                              |
 | patience               | 20          | 20           | early-stopping epochs                    |
 
 The smaller `d_model` here is chosen so the synthetic smoke test runs in

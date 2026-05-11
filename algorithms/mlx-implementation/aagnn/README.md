@@ -1,6 +1,6 @@
 # AAGNN
 
-PyTorch implementation of **Subtractive Aggregation for Attributed Network
+MLX implementation of **Subtractive Aggregation for Attributed Network
 Anomaly Detection** — Shuang Zhou, Qiaoyu Tan, Zhiming Xu, Xiao Huang, Fu-lai
 Chung, *CIKM '21*, November 2021.
 <https://doi.org/10.1145/3459637.3482195>
@@ -94,8 +94,8 @@ print("AUC:", roc_auc_score(net.labels, scores))
 other = SyntheticAttributedNetwork(seed=1).generate()
 scores_other = model.score(other)
 
-model.save("./aagnn.pt")
-loaded = AAGNN.load("./aagnn.pt")
+model.save("./aagnn.npz")
+loaded = AAGNN.load("./aagnn.npz")
 ```
 
 `AttributedNetwork` is a small frozen dataclass holding `X` (n × f
@@ -139,5 +139,5 @@ This module ships the **algorithm** only. Things deliberately excluded:
   MADAN, DOMINANT, AnomalyDAE, AEGIS).
 - Visualisation / parameter-analysis figures (§4.2–4.3).
 - A PyG / DGL wrapping. The implementation uses plain Python neighbour
-  lists + masked tensor ops — fast enough for graphs up to a few thousand
+  lists + MLX tensor ops — fast enough for graphs up to a few thousand
   nodes; rewrite with sparse message passing if you need to scale further.

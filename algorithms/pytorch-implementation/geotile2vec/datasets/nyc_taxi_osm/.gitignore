@@ -1,0 +1,7 @@
+raw/
+*.parquet
+*.json
+*.gz
+*.zip
+*.csv
+__pycache__/

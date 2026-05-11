@@ -1,0 +1,5 @@
+raw/
+*.npz
+*.gz
+*.zip
+__pycache__/
